@@ -9,8 +9,8 @@ from scipy.spatial.distance import squareform
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.binomial import Binomial
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
-device_cpu = torch.device("cpu")
+device = torch.device("cuda")
+device_cpu = torch.device("cuda")
 device_cuda = torch.device("cuda")
 
 
@@ -136,10 +136,10 @@ def VGC_h(m_d, T, C_R, lbda, B, a, rho, n, obj, obj_decoup, h, K, device):
     total = 0
     total_decoup = 0
     for i in range(K):
-        delta_h = m_d.sample().to(torch.device("cpu"))
+        delta_h = m_d.sample().to(device)
         # print(delta_h)
-        cost_vec = (-T* C_R - delta_h * C_R).to(torch.device("cpu"))
-        obj_d, sol_d, lbda_d, gap_d = solve_knapsack(cost_vec, B, a, rho, n, torch.device("cpu"))
+        cost_vec = (-T* C_R - delta_h * C_R).to(device)
+        obj_d, sol_d, lbda_d, gap_d = solve_knapsack(cost_vec, B, a, rho, n, device)
         sol_h_decoup = 1*(cost_vec + lbda <= 0)
         obj_h_decoup = sol_h_decoup * (cost_vec + lbda)
         total += (obj_d - obj)/h
@@ -158,20 +158,20 @@ def VGC_MSOS_h(T, L, C_R, B, a, rho, n, obj, lbda, h, nu, K, device):
     std_2h = ((4 * h ** 2 + 4 * h) / nu) ** 0.5
     L_diag = torch.diag(L)
     for i in range(K):
-        rand_ind = torch.randint(0,n,(1,))[0]
-        rand_vec = torch.zeros(n)
+        rand_ind = torch.randint(0,n,(1,))[0].to(device)
+        rand_vec = torch.zeros(n).to(device)
         L_col = L[:,rand_ind]
-        L_vec = torch.zeros(n)
+        L_vec = torch.zeros(n).to(device)
         L_denom = L[rand_ind,rand_ind]
         L_vec[rand_ind] = L_denom
-        delta_h = torch.normal(0, std_h[rand_ind]) 
-        delta_2h = torch.normal(0, std_2h[rand_ind]) 
+        delta_h = torch.normal(0, std_h[rand_ind]).to(device)
+        delta_2h = torch.normal(0, std_2h[rand_ind]).to(device)
 
-        cost_vec_h = (-T* C_R - L_vec * delta_h * C_R).to(torch.device("cpu")) 
-        cost_vec_2h = (-T* C_R - L_vec * delta_2h * C_R).to(torch.device("cpu"))
+        cost_vec_h = (-T* C_R - L_vec * delta_h * C_R).to(device) 
+        cost_vec_2h = (-T* C_R - L_vec * delta_2h * C_R).to(device)
 
-        obj_h, sol_h, lbda_h, gap_h = solve_knapsack(cost_vec_h, B, a, rho, n, torch.device("cpu"))
-        obj_2h, sol_2h, lbda_2h, gap_2h = solve_knapsack(cost_vec_2h, B, a, rho, n, torch.device("cpu"))
+        obj_h, sol_h, lbda_h, gap_h = solve_knapsack(cost_vec_h, B, a, rho, n, device)
+        obj_2h, sol_2h, lbda_2h, gap_2h = solve_knapsack(cost_vec_2h, B, a, rho, n, device)
         
         total_second += (4 * obj_h - obj_2h - 3 * obj)/(2 * h / n * L_denom)
         total += (obj_h - obj)/(h / n * L_denom)
@@ -183,34 +183,34 @@ def VGC_MSOS_h(T, L, C_R, B, a, rho, n, obj, lbda, h, nu, K, device):
 def VGC_h_l2(m_d, T, C_R, B, a, rho, n, obj, h, K, device):
     total = 0
     for i in range(K):
-        delta_h = m_d.sample().to(torch.device("cpu"))
-        cost_vec = (-T* C_R - delta_h * C_R).to(torch.device("cpu"))
-        obj_d, sol_d, gap_d = solve_reg_knapsack_l2(-T* C_R - delta_h * C_R, B, a, rho, n, torch.device("cpu"))
+        delta_h = m_d.sample().to(device)
+        cost_vec = (-T* C_R - delta_h * C_R).to(device)
+        obj_d, sol_d, gap_d = solve_reg_knapsack_l2(-T* C_R - delta_h * C_R, B, a, rho, n, device)
         total += (obj_d - obj)/h
     vgc_bias = total/K
     return vgc_bias.item()
 
 def Stein_h(T, L, C_R, lbda, n, h, nu, device):
     total = 0
-    ones_vec = torch.ones(n)
-    L_diag = torch.diag(L)
-    cost_vec_pos = (-T* C_R - L_diag * ones_vec * h * C_R / (nu ** 0.5)).to(torch.device("cpu"))
-    cost_vec_neg = (-T* C_R + L_diag * ones_vec * h * C_R / (nu ** 0.5)).to(torch.device("cpu"))
+    ones_vec = torch.ones(n).to(device)
+    L_diag = torch.diag(L).to(device)
+    cost_vec_pos = (-T* C_R - L_diag * ones_vec * h * C_R / (nu ** 0.5)).to(device)
+    cost_vec_neg = (-T* C_R + L_diag * ones_vec * h * C_R / (nu ** 0.5)).to(device)
     sc_terms = (((cost_vec_pos + lbda) <= 0)*1 - ((cost_vec_neg + lbda) <= 0)*1) / (2*h*nu**0.5)
     return torch.sum(sc_terms).item()
 
 def Stein_Slow_h(T, L, C_R, B, a, rho, n, h, nu, device):
     total = 0
-    ones_vec = torch.ones(n)
+    ones_vec = torch.ones(n).to(device)
     pert_vec = ones_vec * h / (nu ** 0.5)
     for j in range(n):
-        unit_vec = torch.zeros(n)
+        unit_vec = torch.zeros(n).to(device)
         unit_vec[j] = pert_vec[j]
         pert = torch.matmul(L, unit_vec)
-        cost_vec_pos = (C_R * (-T - pert)).to(torch.device("cpu"))
-        cost_vec_neg = (C_R * (-T + pert)).to(torch.device("cpu"))
-        obj_pos, sol_pos, lbda_pos, gap_pos = solve_knapsack(cost_vec_pos, B, a, rho, n, torch.device("cpu"))
-        obj_neg, sol_neg, lbda_neg, gap_neg = solve_knapsack(cost_vec_neg, B, a, rho, n, torch.device("cpu"))
+        cost_vec_pos = (C_R * (-T - pert)).to(device)
+        cost_vec_neg = (C_R * (-T + pert)).to(device)
+        obj_pos, sol_pos, lbda_pos, gap_pos = solve_knapsack(cost_vec_pos, B, a, rho, n, device)
+        obj_neg, sol_neg, lbda_neg, gap_neg = solve_knapsack(cost_vec_neg, B, a, rho, n, device)
         sc_term = (sol_pos[j] - sol_neg[j]) / (2*h*nu[j]**0.5)
         total += sc_term
     return total.item()
@@ -226,13 +226,13 @@ def MS_VGC_h(T, L, C_R, B, a, rho, n, obj, h, nu, K, device):
             delta_h = torch.normal(0, std_h)
             delta_2h = torch.normal(0, std_2h)
             # print(delta_h)
-            # cost_vec_h = (-T* C_R - L[j,j] * delta_h * unit_vec * C_R).to(torch.device("cpu"))
-            # cost_vec_2h = (-T* C_R - L[j,j] * delta_2h * unit_vec * C_R).to(torch.device("cpu"))
-            cost_vec_h = (-T* C_R - torch.matmul(L, delta_h * unit_vec * C_R)).to(torch.device("cpu")) 
-            cost_vec_2h = (-T* C_R - torch.matmul(L, delta_2h * unit_vec * C_R)).to(torch.device("cpu"))
+            # cost_vec_h = (-T* C_R - L[j,j] * delta_h * unit_vec * C_R).to(device)
+            # cost_vec_2h = (-T* C_R - L[j,j] * delta_2h * unit_vec * C_R).to(device)
+            cost_vec_h = (-T* C_R - torch.matmul(L, delta_h * unit_vec * C_R)).to(device) 
+            cost_vec_2h = (-T* C_R - torch.matmul(L, delta_2h * unit_vec * C_R)).to(device)
             
-            obj_h, sol_h, lbda_h, gap_h = solve_knapsack(cost_vec_h, B, a, rho, n, torch.device("cpu"))
-            obj_2h, sol_2h, lbda_2h, gap_2h = solve_knapsack(cost_vec_2h, B, a, rho, n, torch.device("cpu"))
+            obj_h, sol_h, lbda_h, gap_h = solve_knapsack(cost_vec_h, B, a, rho, n, device)
+            obj_2h, sol_2h, lbda_2h, gap_2h = solve_knapsack(cost_vec_2h, B, a, rho, n, device)
             total += (4 * obj_h - obj_2h - 3 * obj)/(2 * h * L[j,j])
     vgc_bias = total/K
     return vgc_bias.item()
@@ -248,16 +248,16 @@ def MS_VGC_decoup_h(T, L, C_R, B, a, rho, n, obj, lbda, h, nu, K, device):
     for i in range(K):
         delta_h = torch.normal(0, std_h)
         delta_2h = torch.normal(0, std_2h)
-        # cost_vec_h = (-T* C_R - L[j,j] * delta_h * unit_vec * C_R).to(torch.device("cpu"))
-        # cost_vec_2h = (-T* C_R - L[j,j] * delta_2h * unit_vec * C_R).to(torch.device("cpu"))
-        cost_vec_h = (-T* C_R - L_diag * delta_h * C_R).to(torch.device("cpu")) 
-        cost_vec_2h = (-T* C_R - L_diag * delta_2h * C_R).to(torch.device("cpu"))
+        # cost_vec_h = (-T* C_R - L[j,j] * delta_h * unit_vec * C_R).to(device)
+        # cost_vec_2h = (-T* C_R - L[j,j] * delta_2h * unit_vec * C_R).to(device)
+        cost_vec_h = (-T* C_R - L_diag * delta_h * C_R).to(device) 
+        cost_vec_2h = (-T* C_R - L_diag * delta_2h * C_R).to(device)
         sol_h = 1*(cost_vec_h + lbda <= 0)
         sol_2h = 1*(cost_vec_2h + lbda <= 0)
         obj_h = (sol_h * (cost_vec_h + lbda))
         obj_2h = (sol_2h * (cost_vec_2h + lbda))
-        # obj_h, sol_h, lbda_h, gap_h = solve_knapsack(cost_vec_h, B, a, rho, n, torch.device("cpu"))
-        # obj_2h, sol_2h, lbda_2h, gap_2h = solve_knapsack(cost_vec_2h, B, a, rho, n, torch.device("cpu"))
+        # obj_h, sol_h, lbda_h, gap_h = solve_knapsack(cost_vec_h, B, a, rho, n, device)
+        # obj_2h, sol_2h, lbda_2h, gap_2h = solve_knapsack(cost_vec_2h, B, a, rho, n, device)
         total_second += torch.sum((4 * obj_h - obj_2h - 3 * obj)/(2 * h * L_diag))
         total += torch.sum((obj_h - obj)/(h * L_diag))
     vgc_bias = total/K
@@ -290,8 +290,8 @@ var_1 = np.ones(n) * np.mean(p*(1-p)*S/(S)**2)
 q = 1
 # Convert to Torch
 S = torch.FloatTensor(S).to(device_cpu)
-p = torch.FloatTensor(p)
-p_cuda = torch.FloatTensor(p).to(device)
+p = torch.FloatTensor(p).to(device)
+#p_cuda = torch.FloatTensor(p).to(device)
 
 # Compute distance matrix
 rcdf = probs_combined.merge(centroid_df)
@@ -369,7 +369,10 @@ if os.path.isfile(fil_name_melt + str(sim) + ".csv"):
 else:
     existing_df_melt = pd.DataFrame(data = summary_results[1:], columns = summary_results[0])
     
+print(f'Starting Index: {starting_index}')
+print(f'Number of Experiments: {len(exp_library)}')
 for ind_exp in range(starting_index, len(exp_library)):
+    print(f'Percent done: {ind_exp/len(exp_library)}')
     exp_parameters = exp_library[ind_exp]
     theta_ind = exp_parameters[0]
     theta = sparse_unique_dist_matrix[theta_ind]
@@ -382,7 +385,7 @@ for ind_exp in range(starting_index, len(exp_library)):
     p_hat = m1.sample().to(device_cpu) / S_0
     p_hat_cuda = p_hat.to(device)
     a = torch.ones(n).to(device_cpu)
-    full_out = solve_knapsack(-C_R*p, B, a, 0, n, torch.device("cpu"))
+    full_out = solve_knapsack(-C_R*p, B, a, 0, n, device)
     full_info_obj = full_out[0].item()
     
     tries = 0
@@ -394,8 +397,8 @@ for ind_exp in range(starting_index, len(exp_library)):
             if tries > 5:
                 var_hat = var_hat + (var_hat == 0) * (1+tries)*1e-6 * torch.rand(var_hat.shape[0])
             else:
-                var_hat = var_hat + (var_hat == 0) * 1e-6 * torch.rand(var_hat.shape[0])
-            cov_hat = torch.FloatTensor(torch.diag(var_hat))
+                var_hat = var_hat + (var_hat == 0) * 1e-6 * torch.rand(var_hat.shape[0]).to(device)
+            cov_hat = torch.diag(var_hat)
             cov_hat_cuda = cov_hat.to(device)
             L_0_cuda = construct_L0_matrix(dist_matrix_torch, theta)
             L_0 = L_0_cuda.to(device_cpu)
@@ -405,11 +408,12 @@ for ind_exp in range(starting_index, len(exp_library)):
             m_d = MultivariateNormal(torch.FloatTensor(np.zeros(n)).to(device), d_cov.to(device))
             break
         except:
+            raise
             print("Error, Trying Again")
             tries += 1
 
     # COMPUTE PLUGIN
-    pert_vec = torch.normal(0, torch.ones(n)*0.000001)
+    pert_vec = torch.normal(0, torch.ones(n)*0.000001).to(device)
     T = torch.matmul(L_0, p_hat).to(device_cpu) + pert_vec
     
     # SOLVE KNAPSACK
